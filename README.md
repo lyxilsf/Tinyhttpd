@@ -1,6 +1,7 @@
 
 
 一个简单的http server的详细注释版，参考apue  
+也可以参考乔酱的关于apue的系列学习文章: [UNIX环境高级编程](https://joewt.com/categories/UNIX%E7%8E%AF%E5%A2%83%E9%AB%98%E7%BA%A7%E7%BC%96%E7%A8%8B/)  
 对于初学网络编程很有帮助
 
 
