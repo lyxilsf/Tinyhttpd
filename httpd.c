@@ -194,6 +194,10 @@ void cannot_execute(int client)
 /* Print out an error message with perror() (for system errors; based
  * on value of errno, which indicates system call errors) and exit the
  * program indicating an error. */
+/*
+打印错误消息并退出，perror打印上一个函数的错误原因并输出到STDERR，参数里面的会先打印，
+然后结束进程
+*/
 /**********************************************************************/
 void error_die(const char *sc)
 {
@@ -319,6 +323,13 @@ int get_line(int sock, char *buf, int size)
 
     while ((i < size - 1) && (c != '\n'))
     {
+        /*
+        recv 接收数据
+        ssize_t recv(int sockfd, void *buf, size_t nbytes, int flags)
+
+        flags
+            MSG_PEEK 查看下一个要读取的数据但不真的取走它，当再次调用recv时会返回刚才的查看的数据
+        */
         n = recv(sock, &c, 1, 0);
         /* DEBUG printf("%02X\n", c); */
         if (n > 0)
@@ -326,13 +337,13 @@ int get_line(int sock, char *buf, int size)
             if (c == '\r')
             {
                 n = recv(sock, &c, 1, MSG_PEEK);
-                /* DEBUG printf("%02X\n", c); */
                 if ((n > 0) && (c == '\n'))
                     recv(sock, &c, 1, 0);
                 else
                     c = '\n';
             }
             buf[i] = c;
+            //printf("%c",buf[i]);
             i++;
         }
         else
@@ -432,28 +443,54 @@ int startup(u_short *port)
     int on = 1;
     struct sockaddr_in name;
 
+    /*socket(int domain,int type,int protocal)函数创建一个套接字，
+    socket的返回值，成功返回文件描述符，失败返回-1
+    PF_INET表示IPv4因特网域,是AF_INET的别名
+    0表示采用默认协议，所以在PF_INET通信域中SOCK_STREAM表示tcp协议
+    */
     httpd = socket(PF_INET, SOCK_STREAM, 0);
     if (httpd == -1)
-        error_die("socket");
+        error_die("socket");//自定义的错误处理函数
     memset(&name, 0, sizeof(name));
+    /*
+        htons返回以网络字节序表示的16位整数
+        htonl返回以网络字节序表示的32位整数
+        INADDR_ANY		(u_int32_t)0x00000000  //4字节32位
+    */
     name.sin_family = AF_INET;
     name.sin_port = htons(*port);
     name.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    /*
+        设置套接字选项控制套接字行为
+        int setsockopt(int sockfd, int level, int option, const void *val, socklen_t len)
+        成功返回0，出错返回-1
+        sockfd表示套接字描述符
+        level标识了应用的协议，SOL_SOCKET表示通用的套接字层次选项
+        option 选项，  SO_REUSERADDR 表示如果 *val 非0，重用bind中的地址
+        val 根据option的不同指向一个数据结构或一个整数
+        len 表示val指向的对象的大小
+    */
     if ((setsockopt(httpd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))) < 0)  
     {  
         error_die("setsockopt failed");
     }
+    /*
+        使用bind 将一个套接字关联一个地址
+        成功返回0，失败返回-1
+    */
     if (bind(httpd, (struct sockaddr *)&name, sizeof(name)) < 0)
         error_die("bind");
-    if (*port == 0)  /* if dynamically allocating a port */
+    if (*port == 0)  /* 动态分配一个端口 */
     {
         socklen_t namelen = sizeof(name);
         if (getsockname(httpd, (struct sockaddr *)&name, &namelen) == -1)
             error_die("getsockname");
-        *port = ntohs(name.sin_port);
+        *port = ntohs(name.sin_port);//ntohs返回以主机字节序表示的16位整数
     }
     if (listen(httpd, 5) < 0)
         error_die("listen");
+    //返回的是套接字描述符
     return(httpd);
 }
 
@@ -489,23 +526,35 @@ void unimplemented(int client)
 int main(void)
 {
     int server_sock = -1;
+    //设置http服务的端口 port， u_short 表示 unsigned short 最大值为 65536 可表示所有的端口
     u_short port = 4000;
     int client_sock = -1;
+    /*在IPv4因特网域(AF_INET)中，套接字地址用结构sockaddr_in 表示
+    各个系统定义的有细微的差别
+    sin_family
+    sin_port
+    sin_addr
+    */
     struct sockaddr_in client_name;
     socklen_t  client_name_len = sizeof(client_name);
     pthread_t newthread;
 
     server_sock = startup(&port);
     printf("httpd running on port %d\n", port);
-
+    printf("http://localhost:%d\n",port);
     while (1)
     {
+        /**
+         *  服务器调用了listen，所用的套接字就能接收连接请求。
+         *  使用accept函数获得连接请求并建立连接 
+         */
         client_sock = accept(server_sock,
                 (struct sockaddr *)&client_name,
                 &client_name_len);
         if (client_sock == -1)
             error_die("accept");
         /* accept_request(&client_sock); */
+        // 创建新线程处理连接
         if (pthread_create(&newthread , NULL, (void *)accept_request, (void *)(intptr_t)client_sock) != 0)
             perror("pthread_create");
     }
