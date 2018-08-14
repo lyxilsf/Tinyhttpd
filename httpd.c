@@ -76,6 +76,7 @@ void accept_request(void *arg)
     j=i;
     method[i] = '\0';
 
+    //判断是否是get和post请求
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
         unimplemented(client);
@@ -125,9 +126,9 @@ void accept_request(void *arg)
                 (st.st_mode & S_IXOTH)    )
             cgi = 1;
         if (!cgi)
-            serve_file(client, path);
+            serve_file(client, path);  //非cgi模式会读取文件内容,并将文本内容返回给浏览器
         else
-            execute_cgi(client, path, method, query_string);
+            execute_cgi(client, path, method, query_string);  //cgi模式运行
     }
 
     close(client);
@@ -141,7 +142,7 @@ void bad_request(int client)
 {
     char buf[1024];
 
-    sprintf(buf, "HTTP/1.0 400 BAD REQUEST\r\n");
+    sprintf(buf, "HTTP/1.1 400 BAD REQUEST\r\n");
     send(client, buf, sizeof(buf), 0);
     sprintf(buf, "Content-type: text/html\r\n");
     send(client, buf, sizeof(buf), 0);
@@ -180,7 +181,7 @@ void cannot_execute(int client)
 {
     char buf[1024];
 
-    sprintf(buf, "HTTP/1.0 500 Internal Server Error\r\n");
+    sprintf(buf, "HTTP/1.1 500 Internal Server Error\r\n");
     send(client, buf, strlen(buf), 0);
     sprintf(buf, "Content-type: text/html\r\n");
     send(client, buf, strlen(buf), 0);
@@ -247,6 +248,10 @@ void execute_cgi(int client, const char *path,
     {
     }
 
+/**
+ * 以下过程是README中的工作流程中的7~9过程
+ * 类似于管道通信,具体可以看看apue 15章的进程间通信的管道通信
+ */
 
     if (pipe(cgi_output) < 0) {
         cannot_execute(client);
@@ -261,7 +266,7 @@ void execute_cgi(int client, const char *path,
         cannot_execute(client);
         return;
     }
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    sprintf(buf, "HTTP/1.1 200 OK\r\n");
     send(client, buf, strlen(buf), 0);
     if (pid == 0)  /* child: CGI script */
     {
@@ -364,7 +369,7 @@ void headers(int client, const char *filename)
     char buf[1024];
     (void)filename;  /* could use filename to determine file type */
 
-    strcpy(buf, "HTTP/1.0 200 OK\r\n");
+    strcpy(buf, "HTTP/1.1 200 OK\r\n");
     send(client, buf, strlen(buf), 0);
     strcpy(buf, SERVER_STRING);
     send(client, buf, strlen(buf), 0);
@@ -381,7 +386,7 @@ void not_found(int client)
 {
     char buf[1024];
 
-    sprintf(buf, "HTTP/1.0 404 NOT FOUND\r\n");
+    sprintf(buf, "HTTP/1.1 404 NOT FOUND\r\n");
     send(client, buf, strlen(buf), 0);
     sprintf(buf, SERVER_STRING);
     send(client, buf, strlen(buf), 0);
@@ -418,13 +423,13 @@ void serve_file(int client, const char *filename)
     while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
         numchars = get_line(client, buf, sizeof(buf));
 
-    resource = fopen(filename, "r");
+    resource = fopen(filename, "r");//以只读方式打开文件
     if (resource == NULL)
         not_found(client);
     else
     {
-        headers(client, filename);
-        cat(client, resource);
+        headers(client, filename);//先返回头部信息给客户端浏览器
+        cat(client, resource);//然后将文件内容返回给浏览器
     }
     fclose(resource);
 }
@@ -503,7 +508,7 @@ void unimplemented(int client)
 {
     char buf[1024];
 
-    sprintf(buf, "HTTP/1.0 501 Method Not Implemented\r\n");
+    sprintf(buf, "HTTP/1.1 501 Method Not Implemented\r\n");
     send(client, buf, strlen(buf), 0);
     sprintf(buf, SERVER_STRING);
     send(client, buf, strlen(buf), 0);
